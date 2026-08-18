@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#f8fafc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>多通道计时器 - 小清新简约版</title>
     <!-- 使用 Tailwind CSS 进行现代 UI 渲染 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -55,12 +58,78 @@
             from { box-shadow: 0 0 0 rgba(251, 113, 133, 0); }
             to { box-shadow: 0 4px 15px rgba(251, 113, 133, 0.2); }
         }
+
+        /* iOS Safari 动态地址栏、刘海/圆角屏和触摸操作兼容 */
+        html, body {
+            width: 100%;
+            height: 100%;
+            overscroll-behavior: none;
+            -webkit-text-size-adjust: 100%;
+        }
+        body.app-shell {
+            height: 100vh;
+            height: 100dvh;
+            min-height: -webkit-fill-available;
+        }
+        .main-panel {
+            padding-top: max(1.25rem, env(safe-area-inset-top));
+            padding-left: max(1.25rem, env(safe-area-inset-left));
+            padding-right: max(1.25rem, env(safe-area-inset-right));
+        }
+        .dashboard-scroll {
+            padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+            padding-left: max(1.25rem, env(safe-area-inset-left));
+            padding-right: max(1.25rem, env(safe-area-inset-right));
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        #timersContainer {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        button, label[for], input[type="file"] {
+            touch-action: manipulation;
+        }
+        @media (max-width: 767px) {
+            .dashboard-panel {
+                height: 45vh;
+                height: 45dvh;
+                min-height: 17rem;
+            }
+            input, button {
+                font-size: 16px;
+            }
+        }
+        @media (min-width: 768px) {
+            .main-panel {
+                padding-top: max(2.5rem, env(safe-area-inset-top));
+                padding-left: max(2.5rem, env(safe-area-inset-left));
+            }
+            .dashboard-scroll {
+                padding-left: 2rem;
+                padding-right: max(2rem, env(safe-area-inset-right));
+            }
+        }
+        @media (hover: none) {
+            .timer-card:hover {
+                transform: none;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                scroll-behavior: auto !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col md:flex-row overflow-hidden selection:bg-teal-200 selection:text-teal-900">
+<body class="app-shell bg-slate-50 text-slate-800 font-sans flex flex-col md:flex-row overflow-hidden selection:bg-teal-200 selection:text-teal-900">
 
     <!-- 左侧：主功能区 (计时器列表) -->
-    <main class="flex-1 flex flex-col min-h-0 p-5 md:p-10 h-full overflow-hidden">
+    <main class="main-panel flex-1 flex flex-col min-h-0 p-5 md:p-10 h-full overflow-hidden">
         <header class="mb-6 md:mb-8 flex justify-between items-end shrink-0">
             <div>
                 <h1 class="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-emerald-500" data-i18n="title">
@@ -87,20 +156,20 @@
                 <!-- 彻底替换原生的 select，使用全定制现代下拉组件 -->
                 <div class="relative" id="customSortDropdown">
                     <button id="sortDropdownBtn" class="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg py-1.5 px-3 outline-none cursor-pointer shadow-sm font-medium transition-colors flex items-center gap-2 hover:bg-slate-50">
-                        <span id="sortDropdownText" data-i18n="sortRemaining">剩余时间</span>
+                        <span id="sortDropdownText" data-i18n="sortCreated">创建时间</span>
                         <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
                     <!-- 自定义美化菜单 -->
                     <div id="sortDropdownMenu" class="absolute left-0 mt-1.5 w-32 bg-white border border-slate-100 rounded-xl shadow-[0_10px_25px_rgba(0,0,0,0.05)] opacity-0 pointer-events-none transform -translate-y-2 transition-all duration-200 z-50 overflow-hidden">
                         <div class="p-1 space-y-0.5">
-                            <button class="sort-option w-full text-left px-3 py-2 text-sm text-teal-600 bg-teal-50 font-bold rounded-lg transition-colors" data-value="remaining" data-i18n="sortRemaining">剩余时间</button>
-                            <button class="sort-option w-full text-left px-3 py-2 text-sm text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:text-slate-800 transition-colors" data-value="created" data-i18n="sortCreated">创建时间</button>
+                            <button class="sort-option w-full text-left px-3 py-2 text-sm text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:text-slate-800 transition-colors" data-value="remaining" data-i18n="sortRemaining">剩余时间</button>
+                            <button class="sort-option w-full text-left px-3 py-2 text-sm text-teal-600 bg-teal-50 font-bold rounded-lg transition-colors" data-value="created" data-i18n="sortCreated">创建时间</button>
                         </div>
                     </div>
                 </div>
                 <button id="sortOrderBtn" class="bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 p-1.5 rounded-lg transition-colors shadow-sm" title="切换升降序">
-                    <svg id="icon-asc" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path></svg>
-                    <svg id="icon-desc" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5 4v-12m0 0l-4 4m4-4l4 4"></path></svg>
+                    <svg id="icon-asc" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path></svg>
+                    <svg id="icon-desc" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5 4v-12m0 0l-4 4m4-4l4 4"></path></svg>
                 </button>
             </div>
         </div>
@@ -112,8 +181,8 @@
     </main>
 
     <!-- 右侧：Dashboard 控制台 -->
-    <aside class="w-full h-[45vh] md:h-full md:w-80 lg:w-[400px] shrink-0 bg-white border-t md:border-t-0 md:border-l border-slate-200 flex flex-col z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] md:shadow-[0_0_40px_rgba(0,0,0,0.03)]">
-        <div class="p-5 md:p-8 flex-1 overflow-y-auto space-y-6 md:space-y-8">
+    <aside class="dashboard-panel w-full md:h-full md:w-80 lg:w-[400px] shrink-0 bg-white border-t md:border-t-0 md:border-l border-slate-200 flex flex-col z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] md:shadow-[0_0_40px_rgba(0,0,0,0.03)]">
+        <div class="dashboard-scroll p-5 md:p-8 flex-1 overflow-y-auto space-y-6 md:space-y-8">
             
             <!-- 状态面板 -->
             <div class="space-y-4 md:space-y-5">
@@ -166,17 +235,18 @@
                 <!-- 响铃时长设置 -->
                 <div class="space-y-2.5 mt-2">
                     <label class="text-sm font-medium text-slate-600 block" data-i18n="alarmDurationLabel">响铃自动停止 (秒)</label>
-                    <input type="number" id="alarmDuration" value="5" min="1" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 font-medium focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all shadow-sm">
+                    <input type="number" id="alarmDuration" value="5" min="1" max="60" inputmode="numeric" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 font-medium focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all shadow-sm">
                 </div>
 
                 <!-- 自定义铃声 -->
                 <div class="space-y-2.5 mt-2">
                     <label class="text-sm font-medium text-slate-600 block" data-i18n="customAudioLabel">自定义提示音</label>
-                    <label class="flex items-center justify-center w-full bg-slate-50 border border-slate-200 border-dashed rounded-xl px-4 py-3.5 cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 hover:text-teal-600 transition-all group">
+                    <label for="audioUpload" class="flex items-center justify-center w-full min-h-12 bg-slate-50 border border-slate-200 border-dashed rounded-xl px-4 py-3.5 cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 hover:text-teal-600 transition-all group">
                         <svg class="w-5 h-5 text-slate-400 mr-2 group-hover:text-teal-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
                         <span id="audioFileName" class="text-sm text-slate-500 font-medium truncate group-hover:text-teal-600 transition-colors" data-i18n="uploadAudioText">点击上传音频</span>
-                        <input type="file" id="audioUpload" accept="audio/*" class="hidden">
+                        <input type="file" id="audioUpload" accept=".mp3,.m4a,.aac,.wav,.caf,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/x-wav,audio/x-caf" class="sr-only">
                     </label>
+                    <p id="audioStatus" class="text-xs leading-5 text-slate-400" data-i18n="audioHint" role="status" aria-live="polite">支持 MP3、M4A、AAC、WAV、CAF；选择后会自动进行兼容性检查。</p>
                 </div>
             </div>
 
@@ -199,6 +269,9 @@
                     alarmDurationLabel: "响铃自动停止 (秒)",
                     customAudioLabel: "自定义提示音",
                     uploadAudioText: "点击上传音频",
+                    audioHint: "支持 MP3、M4A、AAC、WAV、CAF；选择后会自动进行兼容性检查。",
+                    audioReady: "提示音已就绪：",
+                    audioUnsupported: "这个音频可能不受当前浏览器支持，请尝试 MP3 或 M4A。",
                     mainAddBtn: "新建计时器",
                     hintText: "✨ 快捷键：按下 <kbd class=\"bg-white text-slate-600 px-2.5 py-1 rounded-md text-xs font-mono shadow-sm border border-slate-200\">Space</kbd> 快速新建",
                     channelPrefix: "计时器",
@@ -224,6 +297,9 @@
                     alarmDurationLabel: "Auto-Stop Alarm (Sec)",
                     customAudioLabel: "Custom Audio",
                     uploadAudioText: "Click to upload audio",
+                    audioHint: "MP3, M4A, AAC, WAV and CAF supported; compatibility is checked after selection.",
+                    audioReady: "Audio ready: ",
+                    audioUnsupported: "This audio may not be supported by this browser. Try MP3 or M4A.",
                     mainAddBtn: "New Timer",
                     hintText: "✨ Shortcut: Press <kbd class=\"bg-white text-slate-600 px-2.5 py-1 rounded-md text-xs font-mono shadow-sm border border-slate-200\">Space</kbd> to add",
                     channelPrefix: "Timer Channel",
@@ -275,12 +351,16 @@
             let timerIdCounter = 1;
             let lastTimerCreationTime = 0; // 新增：记录上一次创建计时器的时间戳
             
-            let currentSortBy = 'remaining'; // 'remaining' 或 'created'
-            let currentSortOrder = 'asc';    // 'asc' (升序) 或 'desc' (降序)
+            let currentSortBy = 'created'; // 默认按创建时间排序
+            let currentSortOrder = 'desc'; // 默认倒序：最新创建的在最上方
             
             let customAudioUrl = null;
             let audioPlayer = new Audio();
             let alarmTimeout = null;
+            let audioContext = null;
+            let audioUnlocked = false;
+            let fallbackNodes = [];
+            let alarmRunId = 0;
 
             // DOM 元素引用
             const container = document.getElementById('timersContainer');
@@ -291,6 +371,7 @@
             const alarmDurationInput = document.getElementById('alarmDuration');
             const audioUpload = document.getElementById('audioUpload');
             const audioFileName = document.getElementById('audioFileName');
+            const audioStatus = document.getElementById('audioStatus');
             const langToggleBtn = document.getElementById('langToggleBtn');
             const sortDropdownBtn = document.getElementById('sortDropdownBtn');
             const sortDropdownMenu = document.getElementById('sortDropdownMenu');
@@ -370,69 +451,169 @@
             });
             
             // --- 音频系统 ---
-            
-            // Web Audio API 合成后备提示音 (清脆的双音效)，避免跨域和文件加载失败
-            function playFallbackChime() {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                const ctx = new AudioContext();
-                
-                function playTone(freq, startTime, duration) {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, startTime);
-                    
-                    gain.gain.setValueAtTime(0, startTime);
-                    gain.gain.linearRampToValueAtTime(1, startTime + 0.05);
-                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-                    
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start(startTime);
-                    osc.stop(startTime + duration);
-                }
-                
-                const now = ctx.currentTime;
-                playTone(880, now, 0.5); // A5
-                playTone(1108.73, now + 0.15, 0.5); // C#6
+            // iOS Safari 只允许在用户操作期间启动音频。复用同一个 AudioContext，
+            // 并在首次触摸/按键时提前解锁，计时结束时才更有机会正常响铃。
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audioPlayer.preload = 'auto';
+            audioPlayer.loop = true;
+            audioPlayer.playsInline = true;
+
+            function getAlarmDurationMs() {
+                const seconds = Math.min(60, Math.max(1, parseInt(alarmDurationInput.value, 10) || 5));
+                alarmDurationInput.value = seconds;
+                return seconds * 1000;
             }
 
-            function playAlarm() {
-                const durationMs = (parseInt(alarmDurationInput.value) || 5) * 1000;
+            async function unlockAudioSystem() {
+                if (!AudioContextClass) return false;
+                try {
+                    if (!audioContext || audioContext.state === 'closed') {
+                        audioContext = new AudioContextClass();
+                    }
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
 
-                if (customAudioUrl) {
-                    audioPlayer.src = customAudioUrl;
-                    audioPlayer.currentTime = 0;
-                    audioPlayer.play().catch(e => {
-                        console.warn('自定义音频播放失败，使用后备提示音:', e);
-                        playFallbackChime();
-                    });
-
-                    // 根据设定的时间自动停止
-                    clearTimeout(alarmTimeout);
-                    alarmTimeout = setTimeout(() => {
-                        audioPlayer.pause();
-                        audioPlayer.currentTime = 0;
-                    }, durationMs);
-                } else {
-                    playFallbackChime();
+                    // 极短静音脉冲：不会被听到，只用于完成 iOS 的用户手势授权。
+                    const oscillator = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    gain.gain.value = 0.00001;
+                    oscillator.connect(gain);
+                    gain.connect(audioContext.destination);
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.02);
+                    audioUnlocked = audioContext.state === 'running';
+                    return audioUnlocked;
+                } catch (error) {
+                    console.warn('音频初始化未完成，将在下次操作时重试:', error);
+                    return false;
                 }
             }
 
-            // 处理自定义音频上传
-            audioUpload.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
-                    customAudioUrl = URL.createObjectURL(file);
-                    audioFileName.textContent = file.name;
-                    audioFileName.removeAttribute('data-i18n'); // 移除 i18n 标记，防止切换语言时覆盖文件名
-                    audioFileName.classList.remove('text-slate-500');
-                    audioFileName.classList.add('text-teal-600');
-                }
+            ['pointerdown', 'touchend', 'keydown'].forEach(eventName => {
+                document.addEventListener(eventName, () => {
+                    if (!audioUnlocked) void unlockAudioSystem();
+                }, { passive: true });
             });
 
+            function stopFallbackChime() {
+                fallbackNodes.forEach(node => {
+                    try { node.stop(); } catch (_) { /* 已停止 */ }
+                    try { node.disconnect(); } catch (_) { /* 已断开 */ }
+                });
+                fallbackNodes = [];
+            }
+
+            function stopAlarm(invalidateRun = true) {
+                if (invalidateRun) alarmRunId += 1;
+                clearTimeout(alarmTimeout);
+                alarmTimeout = null;
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+                stopFallbackChime();
+            }
+
+            // 更醒目的四音上行提示，按设置时长循环；不依赖外部音频文件。
+            async function playFallbackChime(durationMs, runId = alarmRunId) {
+                if (!AudioContextClass) return;
+                await unlockAudioSystem();
+                if (runId !== alarmRunId) return;
+                if (!audioContext || audioContext.state !== 'running') return;
+
+                stopFallbackChime();
+                const start = audioContext.currentTime + 0.02;
+                const end = start + durationMs / 1000;
+                const notes = [783.99, 987.77, 1174.66, 1567.98];
+
+                function scheduleTone(frequency, time) {
+                    const oscillator = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    oscillator.type = 'triangle';
+                    oscillator.frequency.setValueAtTime(frequency, time);
+                    gain.gain.setValueAtTime(0.0001, time);
+                    gain.gain.exponentialRampToValueAtTime(0.42, time + 0.025);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.42);
+                    oscillator.connect(gain);
+                    gain.connect(audioContext.destination);
+                    oscillator.start(time);
+                    oscillator.stop(Math.min(end, time + 0.44));
+                    fallbackNodes.push(oscillator);
+                }
+
+                for (let cycle = start; cycle < end; cycle += 1.35) {
+                    notes.forEach((frequency, index) => {
+                        const noteStart = cycle + index * 0.17;
+                        if (noteStart < end) scheduleTone(frequency, noteStart);
+                    });
+                }
+            }
+
+            async function playAlarm() {
+                const durationMs = getAlarmDurationMs();
+                const runId = ++alarmRunId;
+                stopAlarm(false);
+
+                // Android/部分 Windows 设备可同时振动；iPhone Safari 会安全地忽略。
+                if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
+
+                if (customAudioUrl) {
+                    try {
+                        audioPlayer.muted = false;
+                        audioPlayer.volume = 1;
+                        audioPlayer.currentTime = 0;
+                        await audioPlayer.play();
+                        if (runId !== alarmRunId) return;
+                    } catch (error) {
+                        console.warn('自定义音频播放失败，使用内置提示音:', error);
+                        await playFallbackChime(durationMs, runId);
+                    }
+                } else {
+                    await playFallbackChime(durationMs, runId);
+                }
+
+                if (runId !== alarmRunId) return;
+                alarmTimeout = setTimeout(() => {
+                    if (runId === alarmRunId) stopAlarm();
+                }, durationMs);
+            }
+
+            async function primeCustomAudio() {
+                // 文件选择本身是用户操作，利用这次机会解锁同一个 HTMLAudioElement。
+                try {
+                    audioPlayer.muted = true;
+                    audioPlayer.currentTime = 0;
+                    await audioPlayer.play();
+                    audioPlayer.pause();
+                    audioPlayer.currentTime = 0;
+                    audioPlayer.muted = false;
+                    audioStatus.textContent = `${t('audioReady')}${audioFileName.textContent}`;
+                    audioStatus.className = 'text-xs leading-5 text-teal-600';
+                } catch (error) {
+                    audioPlayer.muted = false;
+                    audioStatus.textContent = t('audioUnsupported');
+                    audioStatus.className = 'text-xs leading-5 text-amber-600';
+                    console.warn('自定义音频兼容性检查失败:', error);
+                }
+            }
+
+            // 明确列出扩展名可避免 iOS 文件选择器把可用的 MP3 显示为灰色。
+            audioUpload.addEventListener('change', (event) => {
+                const file = event.target.files && event.target.files[0];
+                if (!file) return;
+
+                if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
+                customAudioUrl = URL.createObjectURL(file);
+                audioPlayer.src = customAudioUrl;
+                audioPlayer.load();
+
+                audioFileName.textContent = file.name;
+                audioFileName.removeAttribute('data-i18n');
+                audioFileName.classList.remove('text-slate-500');
+                audioFileName.classList.add('text-teal-600');
+                audioStatus.removeAttribute('data-i18n');
+                void unlockAudioSystem();
+                void primeCustomAudio();
+            });
 
             // --- 计时器核心逻辑 ---
 
