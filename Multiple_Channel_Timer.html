@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多通道计时器 - 小清新简约版</title>
+    <!-- 使用 Tailwind CSS 进行现代 UI 渲染 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定义滚动条 - 小清新风格 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+        
+        /* 简单的进入动画 */
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .timer-card {
+            animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .timer-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+        }
+
+        /* 状态指示 - 柔和的小清新色彩 */
+        .running-glow {
+            box-shadow: 0 4px 20px rgba(20, 184, 166, 0.1); /* 柔和的薄荷绿阴影 */
+            border-left-color: #14b8a6 !important; /* Tailwind teal-500 */
+        }
+        .paused-state {
+            border-left-color: #fbbf24 !important; /* Tailwind amber-400 */
+            background-color: #fffbeb; /* 极浅的黄色背景 */
+        }
+        .finished-state {
+            border-left-color: #fb7185 !important; /* Tailwind rose-400 */
+            background-color: #fff1f2;
+            animation: pulse-soft-red 1.5s infinite alternate;
+        }
+
+        @keyframes pulse-soft-red {
+            from { box-shadow: 0 0 0 rgba(251, 113, 133, 0); }
+            to { box-shadow: 0 4px 15px rgba(251, 113, 133, 0.2); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col md:flex-row overflow-hidden selection:bg-teal-200 selection:text-teal-900">
+
+    <!-- 左侧：主功能区 (计时器列表) -->
+    <main class="flex-1 flex flex-col min-h-0 p-5 md:p-10 h-full overflow-hidden">
+        <header class="mb-6 md:mb-8 flex justify-between items-end shrink-0">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-emerald-500" data-i18n="title">
+                    多通道计时器
+                </h1>
+                <p class="text-slate-500 text-sm mt-1.5 font-medium" data-i18n="subtitle">可键盘创建计时器 🌱</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="langToggleBtn" class="bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold py-1.5 px-3 rounded-xl text-sm transition-colors shadow-sm">EN</button>
+                <button id="addTimerBtnHeader" class="md:hidden bg-teal-500 hover:bg-teal-600 text-white px-3 py-2 rounded-xl shadow-sm flex items-center gap-1.5 transition-transform active:scale-95 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span data-i18n="newBtn">新建</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 排序工具栏 -->
+        <div class="flex items-center justify-between mb-3 px-1 shrink-0">
+            <div class="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"></path></svg>
+                <span data-i18n="sortLabel">排序</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <!-- 彻底替换原生的 select，使用全定制现代下拉组件 -->
+                <div class="relative" id="customSortDropdown">
+                    <button id="sortDropdownBtn" class="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg py-1.5 px-3 outline-none cursor-pointer shadow-sm font-medium transition-colors flex items-center gap-2 hover:bg-slate-50">
+                        <span id="sortDropdownText" data-i18n="sortRemaining">剩余时间</span>
+                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <!-- 自定义美化菜单 -->
+                    <div id="sortDropdownMenu" class="absolute left-0 mt-1.5 w-32 bg-white border border-slate-100 rounded-xl shadow-[0_10px_25px_rgba(0,0,0,0.05)] opacity-0 pointer-events-none transform -translate-y-2 transition-all duration-200 z-50 overflow-hidden">
+                        <div class="p-1 space-y-0.5">
+                            <button class="sort-option w-full text-left px-3 py-2 text-sm text-teal-600 bg-teal-50 font-bold rounded-lg transition-colors" data-value="remaining" data-i18n="sortRemaining">剩余时间</button>
+                            <button class="sort-option w-full text-left px-3 py-2 text-sm text-slate-600 font-medium rounded-lg hover:bg-slate-50 hover:text-slate-800 transition-colors" data-value="created" data-i18n="sortCreated">创建时间</button>
+                        </div>
+                    </div>
+                </div>
+                <button id="sortOrderBtn" class="bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 p-1.5 rounded-lg transition-colors shadow-sm" title="切换升降序">
+                    <svg id="icon-asc" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"></path></svg>
+                    <svg id="icon-desc" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5 4v-12m0 0l-4 4m4-4l4 4"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- 计时器列表容器 -->
+        <div id="timersContainer" class="flex-1 overflow-y-auto pr-2 md:pr-3 space-y-4 pb-10 md:pb-20">
+            <!-- 计时器卡片会动态插入到这里 -->
+        </div>
+    </main>
+
+    <!-- 右侧：Dashboard 控制台 -->
+    <aside class="w-full h-[45vh] md:h-full md:w-80 lg:w-[400px] shrink-0 bg-white border-t md:border-t-0 md:border-l border-slate-200 flex flex-col z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] md:shadow-[0_0_40px_rgba(0,0,0,0.03)]">
+        <div class="p-5 md:p-8 flex-1 overflow-y-auto space-y-6 md:space-y-8">
+            
+            <!-- 状态面板 -->
+            <div class="space-y-4 md:space-y-5">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    <span data-i18n="dashboardTitle">控制台</span>
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-teal-50/60 rounded-2xl p-4 border border-teal-100/50 transition-colors hover:bg-teal-50">
+                        <div class="text-teal-600/70 text-xs font-semibold mb-1" data-i18n="runningTasks">运行中的任务</div>
+                        <div class="text-3xl font-extrabold text-teal-600" id="statRunningCount">0</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 transition-colors hover:bg-slate-100/50">
+                        <div class="text-slate-500 text-xs font-semibold mb-1" data-i18n="nextTime">下个到期时间</div>
+                        <div class="text-xl font-mono font-bold text-slate-700 mt-1" id="statNextTime">--:--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快捷操作与说明 -->
+            <div class="pt-2">
+                <button id="addTimerBtn" class="w-full bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-teal-200/50 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    <span data-i18n="mainAddBtn">新建计时器</span>
+                </button>
+                <div class="mt-4 text-center bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <p class="text-sm text-slate-500 flex items-center justify-center gap-2 font-medium" data-i18n="hintText">
+                        ✨ 快捷键：按下 <kbd class="bg-white text-slate-600 px-2.5 py-1 rounded-md text-xs font-mono shadow-sm border border-slate-200">Space</kbd> 快速新建
+                    </p>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <!-- 快捷设置 -->
+            <div class="space-y-5 pb-4">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest" data-i18n="settingsTitle">偏好设置</h3>
+                
+                <!-- 默认时间设置 -->
+                <div class="space-y-2.5">
+                    <label class="text-sm font-medium text-slate-600 block" data-i18n="defaultTimeLabel">默认倒计时 (分:秒)</label>
+                    <div class="flex gap-3">
+                        <input type="number" id="defaultMin" value="10" min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 font-medium focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all shadow-sm">
+                        <span class="text-xl text-slate-400 self-center font-bold">:</span>
+                        <input type="number" id="defaultSec" value="0" min="0" max="59" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 font-medium focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all shadow-sm">
+                    </div>
+                </div>
+
+                <!-- 响铃时长设置 -->
+                <div class="space-y-2.5 mt-2">
+                    <label class="text-sm font-medium text-slate-600 block" data-i18n="alarmDurationLabel">响铃自动停止 (秒)</label>
+                    <input type="number" id="alarmDuration" value="5" min="1" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 font-medium focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition-all shadow-sm">
+                </div>
+
+                <!-- 自定义铃声 -->
+                <div class="space-y-2.5 mt-2">
+                    <label class="text-sm font-medium text-slate-600 block" data-i18n="customAudioLabel">自定义提示音</label>
+                    <label class="flex items-center justify-center w-full bg-slate-50 border border-slate-200 border-dashed rounded-xl px-4 py-3.5 cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 hover:text-teal-600 transition-all group">
+                        <svg class="w-5 h-5 text-slate-400 mr-2 group-hover:text-teal-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+                        <span id="audioFileName" class="text-sm text-slate-500 font-medium truncate group-hover:text-teal-600 transition-colors" data-i18n="uploadAudioText">点击上传音频</span>
+                        <input type="file" id="audioUpload" accept="audio/*" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </aside>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- 多语言支持 (i18n) ---
+            const translations = {
+                zh: {
+                    title: "多通道计时器",
+                    subtitle: "可键盘创建计时器 🌱",
+                    newBtn: "新建",
+                    dashboardTitle: "控制台",
+                    runningTasks: "运行中的任务",
+                    nextTime: "下个到期时间",
+                    settingsTitle: "偏好设置",
+                    defaultTimeLabel: "默认倒计时 (分:秒)",
+                    alarmDurationLabel: "响铃自动停止 (秒)",
+                    customAudioLabel: "自定义提示音",
+                    uploadAudioText: "点击上传音频",
+                    mainAddBtn: "新建计时器",
+                    hintText: "✨ 快捷键：按下 <kbd class=\"bg-white text-slate-600 px-2.5 py-1 rounded-md text-xs font-mono shadow-sm border border-slate-200\">Space</kbd> 快速新建",
+                    channelPrefix: "计时器",
+                    minus10: "减少10秒",
+                    plus30: "增加30秒",
+                    playPause: "暂停/继续",
+                    stopDelete: "停止并删除",
+                    langToggleBtn: "EN",
+                    sortLabel: "排序",
+                    sortRemaining: "剩余时间",
+                    sortCreated: "创建时间",
+                    sortToggleTitle: "切换升序/降序"
+                },
+                en: {
+                    title: "Multi-Timer",
+                    subtitle: "Keyboard shortcuts supported 🌱",
+                    newBtn: "New",
+                    dashboardTitle: "Dashboard",
+                    runningTasks: "Running Tasks",
+                    nextTime: "Next Expire",
+                    settingsTitle: "Preferences",
+                    defaultTimeLabel: "Default Timer (Min:Sec)",
+                    alarmDurationLabel: "Auto-Stop Alarm (Sec)",
+                    customAudioLabel: "Custom Audio",
+                    uploadAudioText: "Click to upload audio",
+                    mainAddBtn: "New Timer",
+                    hintText: "✨ Shortcut: Press <kbd class=\"bg-white text-slate-600 px-2.5 py-1 rounded-md text-xs font-mono shadow-sm border border-slate-200\">Space</kbd> to add",
+                    channelPrefix: "Timer Channel",
+                    minus10: "-10 Sec",
+                    plus30: "+30 Sec",
+                    playPause: "Play/Pause",
+                    stopDelete: "Stop & Delete",
+                    langToggleBtn: "中",
+                    sortLabel: "Sort By",
+                    sortRemaining: "Time Left",
+                    sortCreated: "Created At",
+                    sortToggleTitle: "Toggle Asc/Desc"
+                }
+            };
+
+            let currentLang = 'zh';
+
+            function t(key) {
+                return translations[currentLang][key] || key;
+            }
+
+            function updateLanguage() {
+                // 更新静态 UI
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    if (translations[currentLang][key]) {
+                        el.innerHTML = translations[currentLang][key]; 
+                    }
+                });
+                
+                // 更新语言切换按钮文本
+                document.getElementById('langToggleBtn').textContent = t('langToggleBtn');
+                document.getElementById('sortOrderBtn').title = t('sortToggleTitle');
+
+                // 更新已经创建的计时器卡片的动态文字
+                timers.forEach(timer => {
+                    if (timer.element) {
+                        timer.element.querySelector('.timer-name').textContent = `${t('channelPrefix')} ${timer.id}`;
+                        timer.element.querySelector('.btn-minus10').title = t('minus10');
+                        timer.element.querySelector('.btn-plus30').title = t('plus30');
+                        timer.element.querySelector('.btn-playpause').title = t('playPause');
+                        timer.element.querySelector('.btn-stop').title = t('stopDelete');
+                    }
+                });
+            }
+
+            // --- 状态与核心变量 ---
+            let timers = [];
+            let timerIdCounter = 1;
+            let lastTimerCreationTime = 0; // 新增：记录上一次创建计时器的时间戳
+            
+            let currentSortBy = 'remaining'; // 'remaining' 或 'created'
+            let currentSortOrder = 'asc';    // 'asc' (升序) 或 'desc' (降序)
+            
+            let customAudioUrl = null;
+            let audioPlayer = new Audio();
+            let alarmTimeout = null;
+
+            // DOM 元素引用
+            const container = document.getElementById('timersContainer');
+            const statRunningCount = document.getElementById('statRunningCount');
+            const statNextTime = document.getElementById('statNextTime');
+            const defaultMinInput = document.getElementById('defaultMin');
+            const defaultSecInput = document.getElementById('defaultSec');
+            const alarmDurationInput = document.getElementById('alarmDuration');
+            const audioUpload = document.getElementById('audioUpload');
+            const audioFileName = document.getElementById('audioFileName');
+            const langToggleBtn = document.getElementById('langToggleBtn');
+            const sortDropdownBtn = document.getElementById('sortDropdownBtn');
+            const sortDropdownMenu = document.getElementById('sortDropdownMenu');
+            const sortDropdownText = document.getElementById('sortDropdownText');
+            const sortOptions = document.querySelectorAll('.sort-option');
+            const sortOrderBtn = document.getElementById('sortOrderBtn');
+            const iconAsc = document.getElementById('icon-asc');
+            const iconDesc = document.getElementById('icon-desc');
+
+            // --- 自定义下拉框逻辑 ---
+            let isDropdownOpen = false;
+            
+            function toggleDropdown(force) {
+                isDropdownOpen = force !== undefined ? force : !isDropdownOpen;
+                if (isDropdownOpen) {
+                    sortDropdownMenu.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-2');
+                    sortDropdownMenu.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
+                } else {
+                    sortDropdownMenu.classList.add('opacity-0', 'pointer-events-none', '-translate-y-2');
+                    sortDropdownMenu.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+                }
+            }
+
+            // 点击按钮切换菜单
+            sortDropdownBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDropdown();
+            });
+
+            // 点击外部关闭菜单
+            document.addEventListener('click', () => {
+                toggleDropdown(false);
+            });
+
+            // 监听排序条件点击
+            sortOptions.forEach(option => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // 更新当前选择的变量
+                    currentSortBy = option.getAttribute('data-value');
+                    
+                    // 动态更新按钮文案与翻译标签 (保证语言切换也能兼容)
+                    const i18nKey = option.getAttribute('data-i18n');
+                    sortDropdownText.setAttribute('data-i18n', i18nKey);
+                    sortDropdownText.textContent = t(i18nKey);
+
+                    // 改变UI选中状态
+                    sortOptions.forEach(opt => {
+                        opt.classList.remove('text-teal-600', 'bg-teal-50', 'font-bold');
+                        opt.classList.add('text-slate-600', 'font-medium', 'hover:bg-slate-50', 'hover:text-slate-800');
+                    });
+                    option.classList.remove('text-slate-600', 'font-medium', 'hover:bg-slate-50', 'hover:text-slate-800');
+                    option.classList.add('text-teal-600', 'bg-teal-50', 'font-bold');
+
+                    toggleDropdown(false);
+                    forceSortAndRender();
+                });
+            });
+
+            // 监听升降序切换
+            sortOrderBtn.addEventListener('click', () => {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+                if (currentSortOrder === 'asc') {
+                    iconAsc.classList.remove('hidden');
+                    iconDesc.classList.add('hidden');
+                } else {
+                    iconAsc.classList.add('hidden');
+                    iconDesc.classList.remove('hidden');
+                }
+                forceSortAndRender();
+            });
+
+            // 监听语言切换
+            langToggleBtn.addEventListener('click', () => {
+                currentLang = currentLang === 'zh' ? 'en' : 'zh';
+                updateLanguage();
+            });
+            
+            // --- 音频系统 ---
+            
+            // Web Audio API 合成后备提示音 (清脆的双音效)，避免跨域和文件加载失败
+            function playFallbackChime() {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                
+                function playTone(freq, startTime, duration) {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, startTime);
+                    
+                    gain.gain.setValueAtTime(0, startTime);
+                    gain.gain.linearRampToValueAtTime(1, startTime + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+                    
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + duration);
+                }
+                
+                const now = ctx.currentTime;
+                playTone(880, now, 0.5); // A5
+                playTone(1108.73, now + 0.15, 0.5); // C#6
+            }
+
+            function playAlarm() {
+                const durationMs = (parseInt(alarmDurationInput.value) || 5) * 1000;
+
+                if (customAudioUrl) {
+                    audioPlayer.src = customAudioUrl;
+                    audioPlayer.currentTime = 0;
+                    audioPlayer.play().catch(e => {
+                        console.warn('自定义音频播放失败，使用后备提示音:', e);
+                        playFallbackChime();
+                    });
+
+                    // 根据设定的时间自动停止
+                    clearTimeout(alarmTimeout);
+                    alarmTimeout = setTimeout(() => {
+                        audioPlayer.pause();
+                        audioPlayer.currentTime = 0;
+                    }, durationMs);
+                } else {
+                    playFallbackChime();
+                }
+            }
+
+            // 处理自定义音频上传
+            audioUpload.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
+                    customAudioUrl = URL.createObjectURL(file);
+                    audioFileName.textContent = file.name;
+                    audioFileName.removeAttribute('data-i18n'); // 移除 i18n 标记，防止切换语言时覆盖文件名
+                    audioFileName.classList.remove('text-slate-500');
+                    audioFileName.classList.add('text-teal-600');
+                }
+            });
+
+
+            // --- 计时器核心逻辑 ---
+
+            function getDefaultDuration() {
+                const min = parseInt(defaultMinInput.value) || 0;
+                const sec = parseInt(defaultSecInput.value) || 0;
+                return (min * 60 + sec) * 1000; // 转换为毫秒
+            }
+
+            function formatTime(ms) {
+                if (ms < 0) ms = 0;
+                const totalSeconds = Math.ceil(ms / 1000);
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                
+                if (h > 0) {
+                    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                }
+                return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+
+            function createTimer(durationMs) {
+                const now = Date.now();
+                // 限制创建间隔：如果距离上次创建不足 1000 毫秒（1秒），则直接返回，不创建新计时器
+                if (now - lastTimerCreationTime < 1000) {
+                    return;
+                }
+                lastTimerCreationTime = now;
+
+                const id = timerIdCounter++;
+                const timer = {
+                    id: id,
+                    name: `${t('channelPrefix')} ${id}`,
+                    duration: durationMs,
+                    remaining: durationMs,
+                    endTime: Date.now() + durationMs,
+                    createdAt: Date.now(), // 记录创建时间用于排序
+                    status: 'running', // running, paused, finished
+                    element: null,
+                    autoClearTimeout: null
+                };
+                
+                timer.element = buildTimerDOM(timer);
+                timers.push(timer);
+                fullRender();
+            }
+
+            function removeTimer(id) {
+                const timerIndex = timers.findIndex(t => t.id === id);
+                if (timerIndex !== -1) {
+                    const timer = timers[timerIndex];
+                    if (timer.autoClearTimeout) clearTimeout(timer.autoClearTimeout);
+                    
+                    if (timer.element) {
+                        timer.element.style.opacity = 0;
+                        timer.element.style.transform = 'scale(0.95)';
+                        setTimeout(() => {
+                            if (timer.element && timer.element.parentNode) {
+                                timer.element.remove();
+                            }
+                        }, 300);
+                    }
+                    timers.splice(timerIndex, 1);
+                    updateDashboard();
+                }
+            }
+
+            // --- DOM 构建与操作 (修复了丢失的构建函数) ---
+            
+            function buildTimerDOM(timer) {
+                const div = document.createElement('div');
+                div.className = 'timer-card bg-white rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between shadow-sm border border-slate-100 border-l-4 gap-4';
+                
+                div.innerHTML = `
+                    <div class="flex-1 w-full flex items-center justify-between sm:justify-start sm:gap-8">
+                        <div class="flex flex-col">
+                            <span class="timer-name text-sm text-slate-400 font-bold tracking-wide">${timer.name}</span>
+                            <span class="time-display text-4xl sm:text-5xl font-mono font-bold tracking-tight text-slate-700 mt-1">
+                                ${formatTime(timer.remaining)}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+                        <button class="btn-minus10 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-colors active:scale-95" title="${t('minus10')}">-10s</button>
+                        <button class="btn-plus30 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-colors active:scale-95" title="${t('plus30')}">+30s</button>
+                        
+                        <div class="w-px h-8 bg-slate-200 mx-1 hidden sm:block"></div>
+                        
+                        <button class="btn-playpause bg-teal-50 hover:bg-teal-100 text-teal-600 p-3 rounded-full transition-colors active:scale-95" title="${t('playPause')}">
+                            <svg class="w-6 h-6 pointer-events-none" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
+                        
+                        <button class="btn-stop bg-rose-50 hover:bg-rose-100 text-rose-500 p-3 rounded-full transition-colors active:scale-95" title="${t('stopDelete')}">
+                            <svg class="w-6 h-6 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                `;
+
+                // 绑定事件
+                div.querySelector('.btn-plus30').addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (timer.status === 'running') timer.endTime += 30000;
+                    else if (timer.status === 'paused') timer.remaining += 30000;
+                    updateDOMState(timer);
+                    forceSortAndRender();
+                });
+
+                div.querySelector('.btn-minus10').addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (timer.status === 'running') {
+                        const newEnd = timer.endTime - 10000;
+                        timer.endTime = Math.max(Date.now(), newEnd);
+                    } else if (timer.status === 'paused') {
+                        timer.remaining = Math.max(0, timer.remaining - 10000);
+                    }
+                    updateDOMState(timer);
+                    forceSortAndRender();
+                });
+
+                div.querySelector('.btn-playpause').addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    if (timer.status === 'running') {
+                        timer.status = 'paused';
+                        timer.remaining = Math.max(0, timer.endTime - Date.now());
+                    } else if (timer.status === 'paused') {
+                        timer.status = 'running';
+                        timer.endTime = Date.now() + timer.remaining;
+                    } else if (timer.status === 'finished') {
+                        // 清除自动删除事件
+                        if (timer.autoClearTimeout) {
+                            clearTimeout(timer.autoClearTimeout);
+                            timer.autoClearTimeout = null;
+                        }
+                        // 重新启动为默认时间
+                        timer.status = 'running';
+                        timer.duration = getDefaultDuration();
+                        timer.remaining = timer.duration;
+                        timer.endTime = Date.now() + timer.duration;
+                    }
+                    updateDOMState(timer);
+                    forceSortAndRender();
+                });
+
+                div.querySelector('.btn-stop').addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    removeTimer(timer.id);
+                });
+
+                updateDOMState(timer, div);
+                return div;
+            }
+
+            function updateDOMState(timer, element = timer.element) {
+                if (!element) return;
+                
+                const timeDisplay = element.querySelector('.time-display');
+                timeDisplay.textContent = formatTime(timer.remaining);
+
+                const btnPlayPause = element.querySelector('.btn-playpause');
+
+                // 重置所有状态类
+                element.classList.remove('running-glow', 'paused-state', 'finished-state');
+
+                if (timer.status === 'running') {
+                    element.classList.add('running-glow');
+                    // 修复：运行时应展示 || 暂停图标
+                    btnPlayPause.innerHTML = `<svg class="w-6 h-6 pointer-events-none" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+                } else if (timer.status === 'paused') {
+                    element.classList.add('paused-state');
+                    // 修复：暂停时应展示 |> 播放图标
+                    btnPlayPause.innerHTML = `<svg class="w-6 h-6 pointer-events-none" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+                } else if (timer.status === 'finished') {
+                    element.classList.add('finished-state');
+                    // 结束后显示重置/播放图标
+                    btnPlayPause.innerHTML = `<svg class="w-6 h-6 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>`;
+                }
+            }
+
+            // 排序逻辑：支持按剩余时间或创建时间，升序或降序排列（已完成始终在底部）
+            function sortTimers() {
+                timers.sort((a, b) => {
+                    // 无论什么排序，已完成的始终沉底，保证 UX 体验
+                    if (a.status === 'finished' && b.status !== 'finished') return 1;
+                    if (b.status === 'finished' && a.status !== 'finished') return -1;
+
+                    let valA, valB;
+                    if (currentSortBy === 'remaining') {
+                        valA = a.remaining;
+                        valB = b.remaining;
+                    } else if (currentSortBy === 'created') {
+                        valA = a.createdAt;
+                        valB = b.createdAt;
+                    }
+
+                    if (currentSortOrder === 'asc') {
+                        return valA - valB;
+                    } else {
+                        return valB - valA;
+                    }
+                });
+            }
+
+            function fullRender() {
+                sortTimers();
+                container.innerHTML = '';
+                timers.forEach(t => container.appendChild(t.element));
+                updateDashboard();
+            }
+
+            function forceSortAndRender() {
+                // 仅重新调整顺序，不销毁DOM节点以保持焦点和事件
+                sortTimers();
+                timers.forEach(t => container.appendChild(t.element));
+                updateDashboard();
+            }
+
+            function updateDashboard() {
+                const runningTimers = timers.filter(t => t.status === 'running');
+                statRunningCount.textContent = runningTimers.length;
+
+                if (runningTimers.length > 0) {
+                    // 获取最快到期的时间
+                    const nextMs = Math.min(...runningTimers.map(t => t.remaining));
+                    statNextTime.textContent = formatTime(nextMs);
+                    statNextTime.classList.remove('text-slate-400');
+                    statNextTime.classList.add('text-teal-600');
+                } else {
+                    statNextTime.textContent = '--:--';
+                    statNextTime.classList.remove('text-teal-600');
+                    statNextTime.classList.add('text-slate-400');
+                }
+            }
+
+            // --- 主循环 ---
+            function gameLoop() {
+                const now = Date.now();
+                let needsReorder = false;
+
+                timers.forEach(timer => {
+                    if (timer.status === 'running') {
+                        timer.remaining = timer.endTime - now;
+                        
+                        if (timer.remaining <= 0) {
+                            timer.remaining = 0;
+                            timer.status = 'finished';
+                            playAlarm();
+
+                            // 设定自动清理 (响铃时长 + 10秒)
+                            const ringDurationMs = (parseInt(alarmDurationInput.value) || 5) * 1000;
+                            timer.autoClearTimeout = setTimeout(() => {
+                                removeTimer(timer.id);
+                            }, ringDurationMs + 10000);
+
+                            needsReorder = true;
+                        }
+                        updateDOMState(timer);
+                    }
+                });
+
+                if (needsReorder) {
+                    forceSortAndRender();
+                } else {
+                    // 即使不重新排序，也要更新Dashboard（时间跳动）
+                    updateDashboard(); 
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            // --- 事件监听 ---
+
+            document.getElementById('addTimerBtn').addEventListener('click', () => {
+                createTimer(getDefaultDuration());
+            });
+            document.getElementById('addTimerBtnHeader').addEventListener('click', () => {
+                createTimer(getDefaultDuration());
+            });
+
+            // 键盘快捷键 (空格键)
+            document.addEventListener('keydown', (e) => {
+                // 如果用户正在输入框中打字，则不触发快捷键
+                const targetTag = e.target.tagName.toLowerCase();
+                if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select') return;
+
+                if (e.code === 'Space') {
+                    e.preventDefault(); // 防止页面滚动
+                    createTimer(getDefaultDuration());
+                }
+            });
+
+            // 启动循环
+            requestAnimationFrame(gameLoop);
+        });
+    </script>
+</body>
+</html>
