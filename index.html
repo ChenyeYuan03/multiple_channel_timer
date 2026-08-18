@@ -63,13 +63,19 @@
         html, body {
             width: 100%;
             height: 100%;
+            margin: 0;
+            overflow: hidden;
             overscroll-behavior: none;
             -webkit-text-size-adjust: 100%;
+            background: #f8fafc;
         }
         body.app-shell {
+            position: fixed;
+            inset: 0;
             height: 100vh;
             height: 100dvh;
             min-height: -webkit-fill-available;
+            overscroll-behavior-y: none;
         }
         .main-panel {
             padding-top: max(1.25rem, env(safe-area-inset-top));
@@ -77,6 +83,8 @@
             padding-right: max(1.25rem, env(safe-area-inset-right));
         }
         .dashboard-scroll {
+            min-height: 0;
+            background: #ffffff;
             padding-bottom: calc(2rem + env(safe-area-inset-bottom));
             padding-left: max(1.25rem, env(safe-area-inset-left));
             padding-right: max(1.25rem, env(safe-area-inset-right));
@@ -92,9 +100,11 @@
         }
         @media (max-width: 767px) {
             .dashboard-panel {
-                height: 45vh;
-                height: 45dvh;
-                min-height: 17rem;
+                height: clamp(12rem, 32vh, 20rem);
+                height: clamp(12rem, 32dvh, 20rem);
+                min-height: 0;
+                max-height: 38vh;
+                max-height: 38dvh;
             }
             input, button {
                 font-size: 16px;
@@ -246,7 +256,7 @@
                         <span id="audioFileName" class="text-sm text-slate-500 font-medium truncate group-hover:text-teal-600 transition-colors" data-i18n="uploadAudioText">点击上传音频</span>
                         <input type="file" id="audioUpload" accept=".mp3,.m4a,.aac,.wav,.caf,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/x-wav,audio/x-caf" class="sr-only">
                     </label>
-                    <p id="audioStatus" class="text-xs leading-5 text-slate-400" data-i18n="audioHint" role="status" aria-live="polite">支持 MP3、M4A、AAC、WAV、CAF；选择后会自动进行兼容性检查。</p>
+                    <p id="audioStatus" class="text-xs leading-5 text-slate-400" data-i18n="audioHint" role="status" aria-live="polite">支持 MP3、M4A、AAC、WAV、CAF；选择后只会静默读取，不会立即播放。</p>
                 </div>
             </div>
 
@@ -269,7 +279,8 @@
                     alarmDurationLabel: "响铃自动停止 (秒)",
                     customAudioLabel: "自定义提示音",
                     uploadAudioText: "点击上传音频",
-                    audioHint: "支持 MP3、M4A、AAC、WAV、CAF；选择后会自动进行兼容性检查。",
+                    audioHint: "支持 MP3、M4A、AAC、WAV、CAF；选择后只会静默读取，不会立即播放。",
+                    audioLoading: "正在静默读取音频…",
                     audioReady: "提示音已就绪：",
                     audioUnsupported: "这个音频可能不受当前浏览器支持，请尝试 MP3 或 M4A。",
                     mainAddBtn: "新建计时器",
@@ -297,7 +308,8 @@
                     alarmDurationLabel: "Auto-Stop Alarm (Sec)",
                     customAudioLabel: "Custom Audio",
                     uploadAudioText: "Click to upload audio",
-                    audioHint: "MP3, M4A, AAC, WAV and CAF supported; compatibility is checked after selection.",
+                    audioHint: "MP3, M4A, AAC, WAV and CAF supported; selection is loaded silently without playback.",
+                    audioLoading: "Loading audio silently…",
                     audioReady: "Audio ready: ",
                     audioUnsupported: "This audio may not be supported by this browser. Try MP3 or M4A.",
                     mainAddBtn: "New Timer",
@@ -354,8 +366,7 @@
             let currentSortBy = 'created'; // 默认按创建时间排序
             let currentSortOrder = 'desc'; // 默认倒序：最新创建的在最上方
             
-            let customAudioUrl = null;
-            let audioPlayer = new Audio();
+            let customAudioBuffer = null;
             let alarmTimeout = null;
             let audioContext = null;
             let audioUnlocked = false;
@@ -454,9 +465,6 @@
             // iOS Safari 只允许在用户操作期间启动音频。复用同一个 AudioContext，
             // 并在首次触摸/按键时提前解锁，计时结束时才更有机会正常响铃。
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            audioPlayer.preload = 'auto';
-            audioPlayer.loop = true;
-            audioPlayer.playsInline = true;
 
             function getAlarmDurationMs() {
                 const seconds = Math.min(60, Math.max(1, parseInt(alarmDurationInput.value, 10) || 5));
@@ -508,8 +516,6 @@
                 if (invalidateRun) alarmRunId += 1;
                 clearTimeout(alarmTimeout);
                 alarmTimeout = null;
-                audioPlayer.pause();
-                audioPlayer.currentTime = 0;
                 stopFallbackChime();
             }
 
@@ -548,6 +554,25 @@
                 }
             }
 
+            async function playCustomAudio(durationMs, runId) {
+                if (!customAudioBuffer || !AudioContextClass) return false;
+                await unlockAudioSystem();
+                if (runId !== alarmRunId) return false;
+                if (!audioContext || audioContext.state !== 'running') return false;
+
+                const source = audioContext.createBufferSource();
+                const gain = audioContext.createGain();
+                source.buffer = customAudioBuffer;
+                source.loop = true;
+                gain.gain.value = 1;
+                source.connect(gain);
+                gain.connect(audioContext.destination);
+                source.start();
+                source.stop(audioContext.currentTime + durationMs / 1000);
+                fallbackNodes.push(source);
+                return true;
+            }
+
             async function playAlarm() {
                 const durationMs = getAlarmDurationMs();
                 const runId = ++alarmRunId;
@@ -556,13 +581,12 @@
                 // Android/部分 Windows 设备可同时振动；iPhone Safari 会安全地忽略。
                 if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
 
-                if (customAudioUrl) {
+                if (customAudioBuffer) {
                     try {
-                        audioPlayer.muted = false;
-                        audioPlayer.volume = 1;
-                        audioPlayer.currentTime = 0;
-                        await audioPlayer.play();
-                        if (runId !== alarmRunId) return;
+                        const played = await playCustomAudio(durationMs, runId);
+                        if (!played && runId === alarmRunId) {
+                            await playFallbackChime(durationMs, runId);
+                        }
                     } catch (error) {
                         console.warn('自定义音频播放失败，使用内置提示音:', error);
                         await playFallbackChime(durationMs, runId);
@@ -577,42 +601,59 @@
                 }, durationMs);
             }
 
-            async function primeCustomAudio() {
-                // 文件选择本身是用户操作，利用这次机会解锁同一个 HTMLAudioElement。
-                try {
-                    audioPlayer.muted = true;
-                    audioPlayer.currentTime = 0;
-                    await audioPlayer.play();
-                    audioPlayer.pause();
-                    audioPlayer.currentTime = 0;
-                    audioPlayer.muted = false;
-                    audioStatus.textContent = `${t('audioReady')}${audioFileName.textContent}`;
-                    audioStatus.className = 'text-xs leading-5 text-teal-600';
-                } catch (error) {
-                    audioPlayer.muted = false;
-                    audioStatus.textContent = t('audioUnsupported');
-                    audioStatus.className = 'text-xs leading-5 text-amber-600';
-                    console.warn('自定义音频兼容性检查失败:', error);
-                }
+            function readFileAsArrayBuffer(file) {
+                if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(reader.error);
+                    reader.readAsArrayBuffer(file);
+                });
+            }
+
+            function decodeAudioData(arrayBuffer) {
+                return new Promise((resolve, reject) => {
+                    let settled = false;
+                    const onSuccess = buffer => {
+                        if (!settled) { settled = true; resolve(buffer); }
+                    };
+                    const onError = error => {
+                        if (!settled) { settled = true; reject(error); }
+                    };
+                    const result = audioContext.decodeAudioData(arrayBuffer, onSuccess, onError);
+                    if (result && typeof result.then === 'function') {
+                        result.then(onSuccess, onError);
+                    }
+                });
             }
 
             // 明确列出扩展名可避免 iOS 文件选择器把可用的 MP3 显示为灰色。
-            audioUpload.addEventListener('change', (event) => {
+            audioUpload.addEventListener('change', async (event) => {
                 const file = event.target.files && event.target.files[0];
                 if (!file) return;
 
-                if (customAudioUrl) URL.revokeObjectURL(customAudioUrl);
-                customAudioUrl = URL.createObjectURL(file);
-                audioPlayer.src = customAudioUrl;
-                audioPlayer.load();
-
+                customAudioBuffer = null;
                 audioFileName.textContent = file.name;
                 audioFileName.removeAttribute('data-i18n');
                 audioFileName.classList.remove('text-slate-500');
                 audioFileName.classList.add('text-teal-600');
                 audioStatus.removeAttribute('data-i18n');
-                void unlockAudioSystem();
-                void primeCustomAudio();
+                audioStatus.textContent = t('audioLoading');
+                audioStatus.className = 'text-xs leading-5 text-slate-500';
+
+                try {
+                    await unlockAudioSystem();
+                    if (!audioContext) throw new Error('Web Audio API unavailable');
+                    const arrayBuffer = await readFileAsArrayBuffer(file);
+                    customAudioBuffer = await decodeAudioData(arrayBuffer);
+                    audioStatus.textContent = `${t('audioReady')}${file.name}`;
+                    audioStatus.className = 'text-xs leading-5 text-teal-600';
+                } catch (error) {
+                    customAudioBuffer = null;
+                    audioStatus.textContent = t('audioUnsupported');
+                    audioStatus.className = 'text-xs leading-5 text-amber-600';
+                    console.warn('自定义音频静默解码失败:', error);
+                }
             });
 
             // --- 计时器核心逻辑 ---
